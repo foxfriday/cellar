@@ -1,4 +1,4 @@
--- cellar database schema (v3)
+-- cellar database schema (v4)
 --
 -- To create a fresh database:
 --   sqlite3 inventory.db < schema.sql
@@ -14,9 +14,8 @@ CREATE TABLE producers(
   subregion TEXT DEFAULT NULL,
   region TEXT NOT NULL,
   country TEXT NOT NULL,
-  Category TEXT DEFAULT NULL,
-  created_at TEXT NOT NULL DEFAUlt (datetime('now')),
-  UNIQUE(producer, varietal, vineyard, designation, category));
+  category TEXT DEFAULT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')));
 
 CREATE TABLE inventory(
   iid INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -30,7 +29,6 @@ CREATE TABLE inventory(
   w0 INTEGER DEFAULT NULL,
   w1 INTEGER DEFAULT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(pid, vint, btl),
   FOREIGN KEY (pid) REFERENCES producers(pid) ON DELETE RESTRICT,
   CHECK (oi >= 0), CHECK (hi >= 0), CHECK (ci >= 0), CHECK (btl > 0),
   CHECK (alc IS NULL OR (alc > 0.0 AND alc <= 100.0)),
@@ -75,12 +73,21 @@ SELECT inventory.iid,
        producers.country,
        producers.category
 FROM inventory
-LEFT JOIN producers ON inventory.pid = producers.pid;
+LEFT JOIN producers ON inventory.pid = producers.pid
+ORDER BY producer;
 
 CREATE INDEX idx_producers_country ON producers(country);
 CREATE INDEX idx_producers_region ON producers(region);
 CREATE INDEX idx_producers_producer ON producers(producer);
 CREATE INDEX idx_inventory_pid ON inventory(pid);
+
+-- Uniqueness uses IFNULL because SQLite treats NULLs as distinct in
+-- UNIQUE constraints, which would let duplicates of NULL-valued rows
+-- (e.g. no vineyard, or a non-vintage wine) through.
+CREATE UNIQUE INDEX idx_producers_unique ON producers(
+  producer, varietal, IFNULL(vineyard, ''), IFNULL(designation, ''),
+  IFNULL(category, ''));
+CREATE UNIQUE INDEX idx_inventory_unique ON inventory(pid, IFNULL(vint, 0), btl);
 
 CREATE TABLE tastings(
   tid        INTEGER PRIMARY KEY AUTOINCREMENT,
